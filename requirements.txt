@@ -2,6 +2,7 @@ streamlit>=1.26.0
 jq
 langchain
 langchain_openai
+langchain_nvidia_ai_endpoints
 fastembed
 pgvector
 psycopg2-binary
