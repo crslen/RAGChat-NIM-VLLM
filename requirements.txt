@@ -1,0 +1,10 @@
+streamlit>=1.26.0
+jq
+langchain
+langchain_openai
+fastembed
+pgvector
+psycopg2-binary
+pypdf
+python-dotenv
+bs4

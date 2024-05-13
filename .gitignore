@@ -1,0 +1,8 @@
+/data/looper.json
+/data/index.pkl
+/data/index.faiss
+/data/example response.txt
+/data/vmc_set_aws_feedback.json
+__pycache__/rag.cpython-39.pyc
+postgres_data/models
+postgres_data/data
