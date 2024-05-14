@@ -133,7 +133,7 @@ class ChatCSV:
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1024, chunk_overlap=100)
             all_splits = text_splitter.split_documents(data)
             self.db = PGVector.from_documents(
-                embeddings=embeddings,
+                embedding=embeddings,
                 documents=all_splits,
                 collection_name=self.collection_name,
                 connection=self.CONNECTION_STRING,
@@ -198,7 +198,7 @@ class ChatCSV:
         # Set the vector store to None.
         self.vector_store = None
         self.vector_store.drop_tables()
-        
+
         # Set the retriever to None.
         self.retriever = None
 
