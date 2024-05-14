@@ -3,7 +3,7 @@ from operator import itemgetter
 from langchain_community.vectorstores.pgvector import PGVector
 from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_openai import ChatOpenAI
-from langchain_nvidia_ai_endpoints import ChatNVIDIA
+# from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain.schema.output_parser import StrOutputParser
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.document_loaders import PyPDFLoader
@@ -67,14 +67,14 @@ class ChatCSV:
         - A PromptTemplate for constructing prompts with placeholders for question and context.
         """
 
-        # self.model = ChatOpenAI(
-        #     model=self.llm,
-        #     openai_api_key="EMPTY",
-        #     openai_api_base=self.vllmhost,
-        #     max_tokens=self.token,
-        #     temperature=self.temp,
-        # )
-        self.model = ChatNVIDIA(model="mistral_7b")
+        self.model = ChatOpenAI(
+            model=self.llm,
+            openai_api_key="EMPTY",
+            openai_api_base=self.vllmhost,
+            max_tokens=self.token,
+            temperature=self.temp,
+        )
+
         # Initialize the RecursiveCharacterTextSplitter with specific chunk settings.
         # Your tone should be professional and informative
         self.prompt = PromptTemplate.from_template(
