@@ -1,22 +1,16 @@
 from operator import itemgetter
-
-from langchain_community.vectorstores.pgvector import PGVector
+from langchain_postgres import PGVector
+from langchain_postgres.vectorstores import PGVector
 from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_openai import ChatOpenAI
-# from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain.schema.output_parser import StrOutputParser
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough, RunnableParallel
 from langchain.memory import ConversationBufferMemory
-from langchain.prompts import ChatMessagePromptTemplate
 from langchain.prompts import (
     PromptTemplate,
-    # ChatPromptTemplate,
-    # MessagesPlaceholder,
-    # SystemMessagePromptTemplate,
-    # HumanMessagePromptTemplate,
 )
 from os.path import os
 from dotenv import load_dotenv
@@ -44,9 +38,11 @@ class ChatCSV:
     chain = None
     db = None
     llm = os.getenv("LLM")
+    api_key = os.getenv("API_KEY")
     vllmhost = os.getenv("VLLMHOST")
     token = os.getenv("MAXTOKEN")
     temp = os.getenv("TEMPERATURE")
+    collection_name = os.getenv("COLLECTION_NAME")
     
     CONNECTION_STRING = PGVector.connection_string_from_db_params(
         driver=os.getenv("PGVECTOR_DRIVER"),
@@ -62,14 +58,14 @@ class ChatCSV:
         Initializes the question-answering system with default configurations.
 
         This constructor sets up the following components:
-        - A ChatOllama model for generating responses ('neural-chat').
+        - A ChatOpenAI model for generating responses ('neural-chat').
         - A RecursiveCharacterTextSplitter for splitting text into chunks.
         - A PromptTemplate for constructing prompts with placeholders for question and context.
         """
 
         self.model = ChatOpenAI(
             model=self.llm,
-            openai_api_key="EMPTY",
+            openai_api_key=self.api_key,
             openai_api_base=self.vllmhost,
             max_tokens=self.token,
             temperature=self.temp,
@@ -80,8 +76,7 @@ class ChatCSV:
         self.prompt = PromptTemplate.from_template(
             """
             <s> [INST] You are an assistant for question-answering tasks. Use the following pieces of retrieved context 
-            to answer the question. If you don't know the answer, just say that you don't know. Use three sentences
-             maximum and keep the answer concise. [/INST] </s> 
+            to answer the question. If you don't know the answer, just say that you don't know. [/INST] </s> 
             [INST] Question: {question} 
             Context: {context} 
             Answer: [/INST]
@@ -113,9 +108,10 @@ class ChatCSV:
         if index:
             print("loading indexes")
             vector_store = PGVector(
-                collection_name="rag-nvidia-chat",
-                connection_string=self.CONNECTION_STRING,
-                embedding_function=embeddings,
+                collection_name=self.collection_name,
+                connection=self.CONNECTION_STRING,
+                embeddings=embeddings,
+                use_jsonb=True,
             )
             self.retriever = vector_store.as_retriever(
                 search_type="similarity_score_threshold",
@@ -137,10 +133,11 @@ class ChatCSV:
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1024, chunk_overlap=100)
             all_splits = text_splitter.split_documents(data)
             self.db = PGVector.from_documents(
-                embedding=embeddings,
+                embeddings=embeddings,
                 documents=all_splits,
-                collection_name="rag-nvidia-chat",
-                connection_string=self.CONNECTION_STRING,
+                collection_name=self.collection_name,
+                connection=self.CONNECTION_STRING,
+                use_jsonb=True,
                 pre_delete_collection=False,
             )
             # sets up the retriever
@@ -200,7 +197,8 @@ class ChatCSV:
         """
         # Set the vector store to None.
         self.vector_store = None
-
+        self.vector_store.drop_tables()
+        
         # Set the retriever to None.
         self.retriever = None
 
