@@ -197,7 +197,6 @@ class ChatCSV:
         """
         # Set the vector store to None.
         self.vector_store = None
-        self.vector_store.drop_tables()
 
         # Set the retriever to None.
         self.retriever = None
