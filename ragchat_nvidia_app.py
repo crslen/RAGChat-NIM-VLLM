@@ -3,8 +3,13 @@ from rag import ChatCSV
 import re
 import tempfile
 import os
+from dotenv import load_dotenv
 
-st.set_page_config(page_title="🤖💬 RAG Chat NVIDIA")
+load_dotenv()
+
+app_name = os.getenv("APP_NAME")
+
+st.set_page_config(page_title=app_name)
 st.session_state["thinking_spinner"] = st.empty()
 
 def load_index():
@@ -98,7 +103,7 @@ def page():
     """
 
     with st.sidebar:
-        st.title('🤖💬 RAGChat NVIDIA')
+        st.title(app_name)
         st.markdown("Click Load Index to use previous data or add new links to save in RAG")
         col1, col2 = st.sidebar.columns(2)
         col1.button("Load Index",key="load_index", on_click=load_index)
