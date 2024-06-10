@@ -1,16 +1,21 @@
-from operator import itemgetter
+from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import PGVector
-from langchain_community.embeddings import FastEmbedEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_openai import ChatOpenAI
+from langchain_community.llms import VLLMOpenAI
 from langchain.schema.output_parser import StrOutputParser
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import CSVLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema.runnable import RunnableLambda, RunnablePassthrough, RunnableParallel
-from langchain.memory import ConversationBufferMemory
 from langchain.prompts import (
-    PromptTemplate,
+    ChatPromptTemplate,
+    MessagesPlaceholder,
 )
 from os.path import os
 from dotenv import load_dotenv
@@ -21,20 +26,13 @@ load_dotenv()
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
-# Define the metadata extraction function.
-def metadata_func(record: dict, metadata: dict) -> dict:
-
-    # metadata["summary"] = record.get("feedbackText")
-    metadata["timestamp"] = record.get("createdDate")
-    metadata["totalRevenue"] = record.get("totalRevenue")
-    metadata["productNames"] = record.get("productNames")
-
-    return metadata
 
 class ChatCSV:
     vector_store = None
     retriever = None
+    history_aware_retriever = None
     memory = None
+    model = None
     chain = None
     db = None
     llm = os.getenv("LLM")
@@ -43,6 +41,7 @@ class ChatCSV:
     token = os.getenv("MAXTOKEN")
     temp = os.getenv("TEMPERATURE")
     collection_name = os.getenv("COLLECTION_NAME")
+    store = {}
     
     CONNECTION_STRING = PGVector.connection_string_from_db_params(
         driver=os.getenv("PGVECTOR_DRIVER"),
@@ -62,7 +61,7 @@ class ChatCSV:
         - A RecursiveCharacterTextSplitter for splitting text into chunks.
         - A PromptTemplate for constructing prompts with placeholders for question and context.
         """
-
+        
         self.model = ChatOpenAI(
             model=self.llm,
             openai_api_key=self.api_key,
@@ -71,39 +70,16 @@ class ChatCSV:
             temperature=self.temp,
         )
 
-        # Initialize the RecursiveCharacterTextSplitter with specific chunk settings.
-        # Your tone should be professional and informative
-        self.prompt = PromptTemplate.from_template(
-            """
-            <s> [INST] You are an assistant for question-answering tasks. Use the following pieces of retrieved context 
-            to answer the question. If you don't know the answer, just say that you don't know. [/INST] </s> 
-            [INST] Question: {question} 
-            Context: {context} 
-            Answer: [/INST]
-            """
-        )
-
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history", input_key="question", output_key="answer",return_messages=True)
+    def load_model(self, model_llm: str):
+        print(model_llm)
+        self.model = None
+        self.__init__()
 
     def ingest(self, ingest_path: str, index: bool, type: str):
         '''
-        Ingests data from a CSV file containing resumes, process the data, and set up the
+        Ingests data from a web url or pdf file containing and set up the
         components for further analysis.
-
-        Parameters:
-        - csv_file_path (str): The file path to the CSV file.
-
-        Usage:
-        obj.ingest("/path/to/data.csv")
-
-        This function uses a CSVLoader to load the data from the specified CSV file.
-
-        Args:
-        - file.path (str): The path to the CSV file.
-        - encoding (str): The character encoding of the file (default is 'utf-8').
-        - source_column (str): The column in the CSV containing the data (default is "Resume").
-        '''        
+        '''      
         embeddings=FastEmbedEmbeddings()
         if index:
             print("loading indexes")
@@ -117,9 +93,10 @@ class ChatCSV:
                 search_type="similarity_score_threshold",
                 search_kwargs={
                     "k": 3,
-                    "score_threshold": 0.7,
+                    "score_threshold": 0.3,
                 },
             )
+            print(vector_store.get_collection)
         else:
             if type == "web":
                 loader = WebBaseLoader(ingest_path)
@@ -127,6 +104,8 @@ class ChatCSV:
                 loader = PyPDFLoader(
                     file_path=ingest_path,
                 )
+            elif type == "csv":
+                loader = CSVLoader(file_path=ingest_path)
             # loads the data
             data = loader.load()
             # splits the documents into chunks
@@ -145,30 +124,11 @@ class ChatCSV:
                 search_type="similarity_score_threshold",
                 search_kwargs={
                     "k": 3,
-                    "score_threshold": 0.2,
+                    "score_threshold": 0.3,
                 },
             )
 
-        # Define a processing chain for handling a question-answer scenario.
-        # The chain consists of the following components:
-        # 1. "context" from the retriever
-        # 2. A passthrough for the "question"
-        # 3. Processing with the "prompt"
-        # 4. Interaction with the "model"
-        # 5. Parsing the output using the "StrOutputParser"
-
-        rag_chain_from_docs = (
-            RunnablePassthrough.assign(
-                context=(lambda x: format_docs(x["context"]))
-            )
-                | self.prompt
-                | self.model
-                | StrOutputParser())
-        self.chain = RunnableParallel(
-            {"context": self.retriever, "question": RunnablePassthrough(), "chat_history": RunnableLambda(self.memory.load_memory_variables) | itemgetter("chat_history")}
-        ).assign(answer=rag_chain_from_docs)
-
-    def ask(self, query: str):
+    def ask(self, query: str, kb, prompt):
         """
         Asks a question using the configured processing chain.
 
@@ -180,13 +140,80 @@ class ChatCSV:
         If the processing chain is not set up (empty), a message is returned
         prompting to add a CSV document first.
         """
-        
-        # load memory for history
-        self.memory.load_memory_variables({})
-        response = self.chain.invoke(query)
+
+        qa_system_prompt = prompt
+
+        if kb:
+            contextualize_q_system_prompt = (
+                "Given a chat history and the latest user question "
+                "which might reference context in the chat history, "
+                "formulate a standalone question which can be understood "
+                "without the chat history. Do NOT answer the question, "
+                "just reformulate it if needed and otherwise return it as is."
+            )
+            contextualize_q_prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", contextualize_q_system_prompt),
+                    MessagesPlaceholder("chat_history"),
+                    ("human", "{input}"),
+                ]
+            )
+            qa_system_prompt = qa_system_prompt + "\\nUse the following pieces of retrieved context to answer the question.\\n\\n{context} "
+            self.prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", qa_system_prompt),
+                    MessagesPlaceholder("chat_history"),
+                    ("human", "{input}"),
+                ]
+            )
+            self.history_aware_retriever = create_history_aware_retriever(
+                self.model, self.retriever, contextualize_q_prompt
+            )
+            print(self.prompt)
+            question_answer_chain = create_stuff_documents_chain(self.model, self.prompt)
+            rag_chain = create_retrieval_chain(self.history_aware_retriever, question_answer_chain)
+        else:
+            self.prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", qa_system_prompt),
+                    MessagesPlaceholder("chat_history"),
+                    ("human", "{input}"),
+                ]
+            )
+
+        ### Statefully manage chat history ###
+
+        def get_session_history(session_id: str) -> BaseChatMessageHistory:
+            if session_id not in self.store:
+                self.store[session_id] = ChatMessageHistory()
+            print(self.store[session_id])
+            return self.store[session_id]
+
+        if not kb:
+            rag_chain = (
+                    self.prompt
+                    | self.model
+                    | StrOutputParser())
+
+        self.chain = RunnableWithMessageHistory(
+            rag_chain,
+            get_session_history,
+            input_messages_key="input",
+            history_messages_key="chat_history",
+            output_messages_key="answer",
+        )
+
+        response = self.chain.invoke({"input": query},
+                                         config={
+                                        "configurable": {"session_id": "abc123"}
+                                        },  # constructs a key "abc123" in `store`.
+                                    )
         print(response)
-        query = {"question": query}
-        return response
+
+        if kb:
+            return response["answer"]
+        else:
+            return response
 
     def clear(self):
         """
@@ -197,6 +224,9 @@ class ChatCSV:
         """
         # Set the vector store to None.
         self.vector_store = None
+
+        # Set the history to None
+        self.history_aware_retriever = None
 
         # Set the retriever to None.
         self.retriever = None

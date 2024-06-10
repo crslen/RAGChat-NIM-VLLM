@@ -3,11 +3,16 @@ from rag import ChatCSV
 import re
 import tempfile
 import os
-from dotenv import load_dotenv
+import dotenv
 
-load_dotenv()
+#from dotenv import load_dotenv
+
+dotenv_file = dotenv.find_dotenv()
+dotenv.load_dotenv()
 
 app_name = os.getenv("APP_NAME")
+model_ids = [0,1,2,3,4]
+models = ["google/gemma-2b", "google/gemma-2b-it", "google/gemma-7b", "meta/llama3-8b-instruct", "mistralai/mistral-7b-instruct-v0.2"]
 
 st.set_page_config(page_title=app_name)
 st.session_state["thinking_spinner"] = st.empty()
@@ -27,6 +32,12 @@ def use_regex(input_text):
     x = re.findall(r"'http[^']*'", str(input_text))
     return x
 
+def format_func(option):
+    return models[model_ids.index(option)]
+
+def format_index(model):
+    return model_ids[models.index(model)]
+
 def process_input():
     """
     Processes user input and updates the chat messages in the Streamlit app.
@@ -45,16 +56,10 @@ def process_input():
     if st.session_state["user_input"] and len(st.session_state["user_input"].strip()) > 0:
         # Extract and clean the user input.
         user_text = st.session_state["user_input"].strip()
-        agent_text = st.session_state["assistant"].ask(user_text)
-        # sources = use_regex(agent_text)
-        # sources = list(dict.fromkeys(sources))
-        # source = ""
-        # for s in sources:
-        #     source += s + "\n\n"
-        # if type(agent_text) is dict:
-        #     return agent_text["answer"] + "\n\nSources:\n\n" + source.replace("'","")
-        # else:
-        return agent_text["answer"]
+        kb = st.session_state["kb"]
+        prompt = st.session_state["prompt_input"]
+        agent_text = st.session_state["assistant"].ask(user_text, kb, prompt)
+        return agent_text
 
 def read_and_save_url():
     # Clear the state of the question-answering assistant.
@@ -62,6 +67,13 @@ def read_and_save_url():
 
     #Ingest weblinks from session state
     st.session_state["assistant"].ingest(st.session_state["web_input"], False, "web")
+
+def run_init():
+    llm = format_func(st.session_state["model"])
+    temp = st.session_state["temp"]
+    dotenv.set_key(dotenv_file, "LLM", llm)
+    dotenv.set_key(dotenv_file, "TEMPERATURE", str(temp))
+    st.session_state["assistant"].load_model(llm)
 
 def read_and_save_file():
     """
@@ -87,8 +99,11 @@ def read_and_save_file():
             file_path = tf.name
 
         # Display a spinner while ingesting the file.
-        #with st.session_state["ingestion_spinner"], st.spinner(f"Ingesting {file.name}"):
-        st.session_state["assistant"].ingest(file_path, False, "pdf")
+        file_ext = file.name
+        if file_ext.endswith(".pdf"):
+            st.session_state["assistant"].ingest(file_path, False, "pdf")
+        elif file_ext.endswith(".csv"):
+            st.session_state["assistant"].ingest(file_path, False, "csv")
         os.remove(file_path)
 
 def page():
@@ -101,27 +116,42 @@ def page():
 
     Note: Streamlit (st) functions are used for interacting with the Streamlit app.
     """
+    dotenv.load_dotenv(override=True)
+    llm = os.getenv("LLM")
+    temp = os.getenv("TEMPERATURE")
+
+    default_prompt = """You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know."""
+    temp_help = """In most language models, the temperature range is typically between 0 and 1, where:
+                    0: generates very predictable and similar text to the input (high confidence)
+                    1: generates highly creative and novel text, but with a higher chance of errors (low confidence)
+                For example, a temperature of 0.5 is a common default value that balances creativity and accuracy."""
 
     with st.sidebar:
         st.title(app_name)
-        st.markdown("Click Load Index to use previous data or add new links to save in RAG")
+        #st.markdown("Click Load Index to use previous data or add new links to save in RAG")
+        sel_option = st.selectbox(
+            "Model", options=model_ids, index=format_index(llm), format_func=format_func,  key="model", on_change=run_init)
+        
+        st.text_area("Prompt", default_prompt, key="prompt_input")
         col1, col2 = st.sidebar.columns(2)
         col1.button("Load Index",key="load_index", on_click=load_index)
-        col2.button("Clear Index",key="clear_index", on_click=clear_index)
+        if col2.button("Clear chat history", key="clear_history"):
+            print("Clearing message history")
+            st.session_state["assistant"].clear()
+            st.session_state.trace_link = None
+            st.session_state.run_id = None
+        # col2.button("Clear Index",key="clear_index", on_click=clear_index)
         st.text_area("Web Link(s)", key="web_input", on_change=read_and_save_url)
         st.file_uploader(
-            "Upload PDF",
-            type=["pdf"],
+            "Upload PDF or CSV",
+            type=["pdf","csv"],
             key="file_uploader",
             on_change=read_and_save_file,
             label_visibility="collapsed",
             accept_multiple_files=True,
         )
-        if st.sidebar.button("Clear chat history", key="clear_history"):
-            print("Clearing message history")
-            st.session_state["assistant"].memory.clear()
-            st.session_state.trace_link = None
-            st.session_state.run_id = None
+        st.checkbox("Use Knowledgebase", key="kb", value=True)
+        st.slider("Temperature", 0.0, 1.0, float(temp), 0.1, key="temp", help=temp_help, on_change=run_init)
 
     # Store LLM generated responses
     if "messages" not in st.session_state.keys():

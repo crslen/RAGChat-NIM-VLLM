@@ -6,3 +6,4 @@
 __pycache__/rag.cpython-39.pyc
 postgres_data/models
 postgres_data/data
+.env-backup
