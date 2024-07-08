@@ -6,7 +6,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import PGVector
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI
 from langchain_community.llms import VLLMOpenAI
 from langchain.schema.output_parser import StrOutputParser
 from langchain_community.document_loaders import WebBaseLoader
@@ -41,16 +41,8 @@ class ChatCSV:
     token = os.getenv("MAXTOKEN")
     temp = os.getenv("TEMPERATURE")
     collection_name = os.getenv("COLLECTION_NAME")
+    CONNECTION_STRING = os.getenv("PGVECTOR_CONNECTION")
     store = {}
-    
-    CONNECTION_STRING = PGVector.connection_string_from_db_params(
-        driver=os.getenv("PGVECTOR_DRIVER"),
-        host=os.getenv("PGVECTOR_HOST"),
-        port=int(os.getenv("PGVECTOR_PORT")),
-        database=os.getenv("PGVECTOR_DATABASE"),
-        user=os.getenv("PGVECTOR_USER"),
-        password=os.getenv("PGVECTOR_PASSWORD"),
-    )
 
     def __init__(self):
         """
@@ -62,16 +54,24 @@ class ChatCSV:
         - A PromptTemplate for constructing prompts with placeholders for question and context.
         """
         
-        self.model = ChatOpenAI(
-            model=self.llm,
-            openai_api_key=self.api_key,
+        # self.model = ChatOpenAI(
+        #     model=self.llm,
+        #     openai_api_key=self.api_key,
+        #     openai_api_base=self.vllmhost,
+        #     max_tokens=self.token,
+        #     temperature=self.temp,
+        # )
+
+        self.model = VLLMOpenAI(
+            openai_api_key="EMPTY",
             openai_api_base=self.vllmhost,
+            model_name=self.llm,
             max_tokens=self.token,
             temperature=self.temp,
+            model_kwargs={"stop": ["."]},
         )
 
     def load_model(self, model_llm: str):
-        print(model_llm)
         self.model = None
         self.__init__()
 
@@ -96,7 +96,6 @@ class ChatCSV:
                     "score_threshold": 0.3,
                 },
             )
-            print(vector_store.get_collection)
         else:
             if type == "web":
                 loader = WebBaseLoader(ingest_path)
@@ -206,7 +205,7 @@ class ChatCSV:
         response = self.chain.invoke({"input": query},
                                          config={
                                         "configurable": {"session_id": "abc123"}
-                                        },  # constructs a key "abc123" in `store`.
+                                        },
                                     )
         print(response)
 

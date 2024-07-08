@@ -12,7 +12,7 @@ dotenv.load_dotenv()
 
 app_name = os.getenv("APP_NAME")
 model_ids = [0,1,2,3,4]
-models = ["google/gemma-2b", "google/gemma-2b-it", "google/gemma-7b", "meta/llama3-8b-instruct", "mistralai/mistral-7b-instruct-v0.2"]
+models = ["mistralai/Mistral-7B-Instruct-v0.2"]
 
 st.set_page_config(page_title=app_name)
 st.session_state["thinking_spinner"] = st.empty()
@@ -129,18 +129,23 @@ def page():
     with st.sidebar:
         st.title(app_name)
         #st.markdown("Click Load Index to use previous data or add new links to save in RAG")
-        sel_option = st.selectbox(
-            "Model", options=model_ids, index=format_index(llm), format_func=format_func,  key="model", on_change=run_init)
-        
-        st.text_area("Prompt", default_prompt, key="prompt_input")
-        col1, col2 = st.sidebar.columns(2)
-        col1.button("Load Index",key="load_index", on_click=load_index)
-        if col2.button("Clear chat history", key="clear_history"):
-            print("Clearing message history")
-            st.session_state["assistant"].clear()
-            st.session_state.trace_link = None
-            st.session_state.run_id = None
-        # col2.button("Clear Index",key="clear_index", on_click=clear_index)
+        config = st.toggle("Show Configuration")
+        if config:
+            st.write(llm)
+            # sel_option = st.selectbox(
+            #     "Model", options=model_ids, index=format_index(llm), format_func=format_func,  key="model", on_change=run_init)     
+            st.text_area("Prompt", default_prompt, key="prompt_input")
+            col1, col2 = st.sidebar.columns(2)
+            col1.button("Load Index",key="load_index", on_click=load_index)
+            if col2.button("Clear chat history", key="clear_history"):
+                st.session_state["assistant"].clear()
+                st.session_state.trace_link = None
+                st.session_state.run_id = None
+            st.slider("Temperature", 0.0, 1.0, float(temp), 0.1, key="temp", help=temp_help, on_change=run_init)
+        else:
+            print("loading prompt")
+            st.session_state["prompt_input"] = default_prompt
+               
         st.text_area("Web Link(s)", key="web_input", on_change=read_and_save_url)
         st.file_uploader(
             "Upload PDF or CSV",
@@ -150,8 +155,7 @@ def page():
             label_visibility="collapsed",
             accept_multiple_files=True,
         )
-        st.checkbox("Use Knowledgebase", key="kb", value=True)
-        st.slider("Temperature", 0.0, 1.0, float(temp), 0.1, key="temp", help=temp_help, on_change=run_init)
+        st.checkbox("Use Knowledgebase", key="kb", value=True, on_change=clear_index)
 
     # Store LLM generated responses
     if "messages" not in st.session_state.keys():

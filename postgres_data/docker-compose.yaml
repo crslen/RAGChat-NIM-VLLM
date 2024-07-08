@@ -1,5 +1,28 @@
 version: "3"
 services:
+  vllm-openai:
+      container_name: vllm-openai
+      deploy:
+          resources:
+              reservations:
+                  devices:
+                      - driver: nvidia
+                        count: all
+                        capabilities:
+                            - gpu
+      volumes:
+          - ~/.cache/huggingface:/root/.cache/huggingface
+          - ./models:/models
+      environment:
+          # - HUGGING_FACE_HUB_TOKEN=<hugging_face_token>
+          - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+          - TOKENIZERS_PARALLELISM=false
+      ports:
+          - 8000:8000
+      ipc: host
+      image: vllm/vllm-openai:latest
+      command: --model ${LLM} --enforce-eager --gpu-memory-utilization ${MEM_USAGE} --max-model-len=512 --device cuda --download-dir /models
+
   postgres:
     build:
       # context: ./postgres
@@ -9,8 +32,6 @@ services:
     volumes:
       - ./data/:/var/lib/postgresql/data
       - ./postgres/vector_extension.sql:/docker-entrypoint-initdb.d/0-vector_extension.sql
-      # - ./postgres/0-vector-extension.sh:/docker-entrypoint-initdb.d/0-vector-extension.sh
-
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
