@@ -11,8 +11,6 @@ dotenv_file = dotenv.find_dotenv()
 dotenv.load_dotenv()
 
 app_name = os.getenv("APP_NAME")
-model_ids = [0,1,2,3,4]
-models = ["mistralai/Mistral-7B-Instruct-v0.2"]
 
 st.set_page_config(page_title=app_name)
 st.session_state["thinking_spinner"] = st.empty()
@@ -31,12 +29,6 @@ def clear_index():
 def use_regex(input_text):
     x = re.findall(r"'http[^']*'", str(input_text))
     return x
-
-def format_func(option):
-    return models[model_ids.index(option)]
-
-def format_index(model):
-    return model_ids[models.index(model)]
 
 def process_input():
     """
@@ -69,11 +61,8 @@ def read_and_save_url():
     st.session_state["assistant"].ingest(st.session_state["web_input"], False, "web")
 
 def run_init():
-    # llm = format_func(st.session_state["model"])
     temp = st.session_state["temp"]
-    # dotenv.set_key(dotenv_file, "LLM", llm)
     dotenv.set_key(dotenv_file, "TEMPERATURE", str(temp))
-    # st.session_state["assistant"].load_model(llm)
 
 def read_and_save_file():
     """
@@ -128,12 +117,9 @@ def page():
 
     with st.sidebar:
         st.title(app_name)
-        #st.markdown("Click Load Index to use previous data or add new links to save in RAG")
         config = st.toggle("Show Configuration")
         if config:
-            st.write(llm)
-            # sel_option = st.selectbox(
-            #     "Model", options=model_ids, index=format_index(llm), format_func=format_func,  key="model", on_change=run_init)     
+            st.write(llm)  
             st.text_area("Prompt", default_prompt, key="prompt_input")
             col1, col2 = st.sidebar.columns(2)
             col1.button("Load Index",key="load_index", on_click=load_index)
