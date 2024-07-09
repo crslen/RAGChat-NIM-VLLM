@@ -68,7 +68,7 @@ class ChatCSV:
             model_name=self.llm,
             max_tokens=self.token,
             temperature=self.temp,
-            model_kwargs={"stop": ["."]},
+            # model_kwargs={"stop": ["."]},
         )
 
     def load_model(self, model_llm: str):

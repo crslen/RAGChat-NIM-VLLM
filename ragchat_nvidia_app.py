@@ -69,11 +69,11 @@ def read_and_save_url():
     st.session_state["assistant"].ingest(st.session_state["web_input"], False, "web")
 
 def run_init():
-    llm = format_func(st.session_state["model"])
+    # llm = format_func(st.session_state["model"])
     temp = st.session_state["temp"]
-    dotenv.set_key(dotenv_file, "LLM", llm)
+    # dotenv.set_key(dotenv_file, "LLM", llm)
     dotenv.set_key(dotenv_file, "TEMPERATURE", str(temp))
-    st.session_state["assistant"].load_model(llm)
+    # st.session_state["assistant"].load_model(llm)
 
 def read_and_save_file():
     """
@@ -155,7 +155,7 @@ def page():
             label_visibility="collapsed",
             accept_multiple_files=True,
         )
-        st.checkbox("Use Knowledgebase", key="kb", value=True, on_change=clear_index)
+        st.checkbox("Use Knowledgebase", key="kb", value=False, on_change=clear_index)
 
     # Store LLM generated responses
     if "messages" not in st.session_state.keys():
