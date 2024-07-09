@@ -1,8 +1,8 @@
 streamlit>=1.26.0
 jq
-langchain
+langchain==0.2.6
 langchain_openai
-langchain-community
+langchain-community==0.2.6
 langchain-postgres
 fastembed
 pgvector
