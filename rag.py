@@ -228,7 +228,7 @@ class ChatCSV:
         self.history_aware_retriever = None
 
         # Set the retriever to None.
-        self.retriever = None
+        # self.retriever = None
 
         # Set the processing chain to None.
         self.chain = None
