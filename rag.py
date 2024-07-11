@@ -168,7 +168,6 @@ class ChatCSV:
             self.history_aware_retriever = create_history_aware_retriever(
                 self.model, self.retriever, contextualize_q_prompt
             )
-            print(self.prompt)
             question_answer_chain = create_stuff_documents_chain(self.model, self.prompt)
             rag_chain = create_retrieval_chain(self.history_aware_retriever, question_answer_chain)
         else:
@@ -185,7 +184,6 @@ class ChatCSV:
         def get_session_history(session_id: str) -> BaseChatMessageHistory:
             if session_id not in self.store:
                 self.store[session_id] = ChatMessageHistory()
-            print(self.store[session_id])
             return self.store[session_id]
 
         if not kb:
@@ -214,6 +212,11 @@ class ChatCSV:
         else:
             return response
 
+    def check_kb(self, kb: bool):
+        self.clear()
+        if kb:
+            self.ingest(self, index=True, type="")
+
     def clear(self):
         """
         Clears the components in the question-answering system.
@@ -221,14 +224,11 @@ class ChatCSV:
         This method resets the vector store, retriever, and processing chain to None,
         effectively clearing the existing configuration.
         """
-        # Set the vector store to None.
-        self.vector_store = None
-
-        # Set the history to None
-        self.history_aware_retriever = None
-
-        # Set the retriever to None.
-        # self.retriever = None
-
-        # Set the processing chain to None.
+        print("clearing the components in the question-answering system.")
         self.chain = None
+        self.vector_store = None
+        self.retriever = None
+        # self.history_aware_retriever = None
+        self.memory = None
+        self.db = None
+        self.store = {}

@@ -22,9 +22,7 @@ def load_index():
             st.write(load)
 
 def clear_index():
-    st.session_state["assistant"].clear()
-    with st.chat_message("assistant", avatar="./images/ragechatbot.png"):
-        st.write("Index cleared")
+    st.session_state["assistant"].check_kb(st.session_state["kb"])
 
 def use_regex(input_text):
     x = re.findall(r"'http[^']*'", str(input_text))
@@ -123,13 +121,12 @@ def page():
             st.text_area("Prompt", default_prompt, key="prompt_input")
             col1, col2 = st.sidebar.columns(2)
             col1.button("Load Index",key="load_index", on_click=load_index)
-            if col2.button("Clear chat history", key="clear_history"):
+            if col2.button("Clear chat history", key="clear_history", on_click=clear_index):
                 st.session_state["assistant"].clear()
                 st.session_state.trace_link = None
                 st.session_state.run_id = None
             st.slider("Temperature", 0.0, 1.0, float(temp), 0.1, key="temp", help=temp_help, on_change=run_init)
         else:
-            print("loading prompt")
             st.session_state["prompt_input"] = default_prompt
                
         st.text_area("Web Link(s)", key="web_input", on_change=read_and_save_url)
@@ -146,7 +143,7 @@ def page():
     # Store LLM generated responses
     if "messages" not in st.session_state.keys():
         st.session_state["assistant"] = ChatCSV()
-        load_index()
+        # load_index()
         st.session_state.messages = []
         st.session_state.messages = [{"role": "assistant", "content": "How may I help you?"}]
 
