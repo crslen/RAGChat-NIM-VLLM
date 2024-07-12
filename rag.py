@@ -9,6 +9,7 @@ from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 # from langchain_openai import ChatOpenAI
 from langchain_community.llms import VLLMOpenAI
 from langchain.schema.output_parser import StrOutputParser
+from langchain_core.runnables import Runnable
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import CSVLoader
@@ -17,6 +18,7 @@ from langchain.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
 )
+import secrets
 from os.path import os
 from dotenv import load_dotenv
 
@@ -26,6 +28,11 @@ load_dotenv()
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
+def make_token():
+    """
+    Creates a cryptographically-secure, URL-safe string
+    """
+    return secrets.token_urlsafe(16)  
 
 class ChatCSV:
     vector_store = None
@@ -35,6 +42,7 @@ class ChatCSV:
     model = None
     chain = None
     db = None
+    sessionid = make_token()
     llm = os.getenv("LLM")
     api_key = os.getenv("API_KEY")
     vllmhost = os.getenv("VLLMHOST")
@@ -93,7 +101,7 @@ class ChatCSV:
                 search_type="similarity_score_threshold",
                 search_kwargs={
                     "k": 3,
-                    "score_threshold": 0.3,
+                    "score_threshold": float(self.temp),
                 },
             )
         else:
@@ -123,7 +131,7 @@ class ChatCSV:
                 search_type="similarity_score_threshold",
                 search_kwargs={
                     "k": 3,
-                    "score_threshold": 0.3,
+                    "score_threshold": float(self.temp),
                 },
             )
 
@@ -143,41 +151,42 @@ class ChatCSV:
         qa_system_prompt = prompt
 
         if kb:
-            contextualize_q_system_prompt = (
-                "Given a chat history and the latest user question "
-                "which might reference context in the chat history, "
-                "formulate a standalone question which can be understood "
-                "without the chat history. Do NOT answer the question, "
-                "just reformulate it if needed and otherwise return it as is."
-            )
+            contextualize_q_system_prompt = """Given a chat history and the latest user question \
+                which might reference context in the chat history, formulate a standalone question \
+                which can be understood without the chat history. Do NOT answer the question, \
+                just reformulate it if needed and otherwise return it as is."""
             contextualize_q_prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", contextualize_q_system_prompt),
-                    MessagesPlaceholder("chat_history"),
+                    MessagesPlaceholder(variable_name="chat_history"),
                     ("human", "{input}"),
                 ]
             )
-            qa_system_prompt = qa_system_prompt + "\\nUse the following pieces of retrieved context to answer the question.\\n\\n{context} "
-            self.prompt = ChatPromptTemplate.from_messages(
-                [
-                    ("system", qa_system_prompt),
-                    MessagesPlaceholder("chat_history"),
-                    ("human", "{input}"),
-                ]
-            )
+            # print(contextualize_q_prompt)
             self.history_aware_retriever = create_history_aware_retriever(
                 self.model, self.retriever, contextualize_q_prompt
             )
+  
+            qa_system_prompt = qa_system_prompt + """\\nUse the following pieces of retrieved context to answer the question.\\n\\n{context}"""
+            self.prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", qa_system_prompt),
+                    MessagesPlaceholder(variable_name="chat_history"),
+                    ("human", "{input}"),
+                ]
+            )
+
             question_answer_chain = create_stuff_documents_chain(self.model, self.prompt)
-            rag_chain = create_retrieval_chain(self.history_aware_retriever, question_answer_chain)
+            runnable = create_retrieval_chain(self.history_aware_retriever, question_answer_chain)
         else:
             self.prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", qa_system_prompt),
-                    MessagesPlaceholder("chat_history"),
+                    MessagesPlaceholder(variable_name="chat_history"),
                     ("human", "{input}"),
                 ]
             )
+            runnable: Runnable = self.prompt | self.model
 
         ### Statefully manage chat history ###
 
@@ -186,23 +195,20 @@ class ChatCSV:
                 self.store[session_id] = ChatMessageHistory()
             return self.store[session_id]
 
-        if not kb:
-            rag_chain = (
-                    self.prompt
-                    | self.model
-                    | StrOutputParser())
+        # if not kb:
+        #     runnable: Runnable = self.prompt | self.model
 
         self.chain = RunnableWithMessageHistory(
-            rag_chain,
+            runnable,
             get_session_history,
             input_messages_key="input",
             history_messages_key="chat_history",
-            output_messages_key="answer",
+            output_messages_key="answer" if kb else None,
         )
 
         response = self.chain.invoke({"input": query},
                                          config={
-                                        "configurable": {"session_id": "abc123"}
+                                        "configurable": {"session_id": self.sessionid}
                                         },
                                     )
         print(response)

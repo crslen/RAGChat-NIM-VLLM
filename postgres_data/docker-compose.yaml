@@ -21,7 +21,8 @@ services:
           - 8000:8000
       ipc: host
       image: vllm/vllm-openai:latest
-      command: --model ${LLM} --enforce-eager --quantization ${QUANT} --gpu-memory-utilization ${MEM_USAGE} --max-model-len=${MAX_MODEL_LEN} --device cuda --download-dir /models
+      # --max-model-len=${MAX_MODEL_LEN}
+      command: --model ${LLM} --enforce-eager --quantization ${QUANT} --gpu-memory-utilization ${MEM_USAGE} --device cuda --download-dir /models
 
   postgres:
     build:
